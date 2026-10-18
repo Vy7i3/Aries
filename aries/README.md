@@ -1,6 +1,6 @@
 # ARIES — System Auditing Terminal
 
-**ARIES** is a beautiful, read-only system auditing tool for Arch Linux (and Arch-based distros).  
+**ARIES** is a beautiful, read-only and interactive system auditing tool for Arch Linux (and Arch-based distros).  
 Inspired by the clean Hermes-style terminal interface with a white/grey/dark-grey gradient title and a goat-with-horns pixel art.
 
 ```
@@ -69,3 +69,7 @@ aries --help
 ## License
 
 MIT — free to use, modify, and share.
+
+## Caution
+
+This Version Is still UNDER DEVELOPMENT, USE WITH YOUR CAUTION, there may be bugs and false positives.
