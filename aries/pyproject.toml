@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aries-audit"
+version = "1.0.0"
+description = "Beautiful system auditing terminal for Arch Linux"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "ARIES Project" }]
+dependencies = [
+    "rich>=13.7.0",
+    "psutil>=5.9.0",
+    "click>=8.1.0",
+]
+
+[project.scripts]
+aries = "aries.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["aries*", "audits*"]
