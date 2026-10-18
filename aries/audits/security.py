@@ -21,7 +21,9 @@ class Security:
         self._check_suid(res)
         self._check_listening_ports(res)
         self._check_kernel_hardening(res)
-
+        self._check_umask(res)
+        self._check_issue(res)
+        self._check_motd(res)
         return res
 
     def _check_ssh(self, res: SectionResult) -> None:
@@ -215,3 +217,36 @@ class Security:
                     Severity.WARN,
                     f"{key}={val} (expected {expected})",
                 )
+
+    def _check_umask(self, res: SectionResult) -> None:
+        code, out, _ = run_cmd(["bash", "-lc", "umask"])
+        if code == 0 and out.strip():
+            u = out.strip()
+            if u in ("0022", "022", "0027", "027", "0077", "077"):
+                sev = Severity.OK if u in ("0027", "027", "0077", "077") else Severity.INFO
+                res.add("umask", sev, u)
+            else:
+                res.add("umask", Severity.WARN, u, "prefer 027 or 077")
+        else:
+            res.add("umask", Severity.SKIP, "n/a")
+
+    def _check_issue(self, res: SectionResult) -> None:
+        for name in ("/etc/issue", "/etc/issue.net"):
+            p = Path(name)
+            if p.is_file():
+                try:
+                    text = p.read_text(errors="replace")[:200]
+                    if any(x in text for x in ("\\r", "\\v", "Welcome")):
+                        res.add(name, Severity.INFO, "banner present")
+                    else:
+                        res.add(name, Severity.INFO, "present")
+                except OSError:
+                    pass
+
+    def _check_motd(self, res: SectionResult) -> None:
+        p = Path("/etc/motd")
+        if p.is_file():
+            res.add("/etc/motd", Severity.INFO, "present")
+        else:
+            res.add("/etc/motd", Severity.INFO, "absent")
+
