@@ -1,7 +1,8 @@
-"""ARIES entry point — Interactive System Auditing Terminal for Arch Linux."""
+"""ARIES — Hermes-style dashboard + chat input + deep file scanning."""
 
 from __future__ import annotations
 
+import getpass
 import json
 import sys
 from datetime import datetime, timezone
@@ -11,13 +12,21 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
-from rich.prompt import Prompt
+from rich.prompt import Prompt, Confirm
 from rich.align import Align
 from rich import box
 
 from aries import __version__
-from aries.banner import render_banner, render_compact_banner
-from aries.menu import arrow_menu, _flush_stdin
+from aries.dashboard import render_dashboard, FEATURES
+from aries.deps import prompt_install_missing
+from aries.exttools import run_lynis, run_chkrootkit, run_rkhunter, show_tool_result
+from aries.scanner import (
+    deep_scan,
+    build_baseline,
+    compare_baseline,
+    _clamscan_available,
+    ScanReport,
+)
 from audits import (
     SystemInfo,
     Resources,
@@ -26,6 +35,9 @@ from audits import (
     Services,
     Users,
     Filesystem,
+    Hardening,
+    RootkitIndicators,
+    LogAudit,
 )
 from audits.base import Severity, SectionResult
 
@@ -38,7 +50,6 @@ SEVERITY_STYLE = {
     Severity.CRITICAL: "bold red",
     Severity.SKIP: "dim",
 }
-
 SEVERITY_ICON = {
     Severity.OK: "✓",
     Severity.INFO: "•",
@@ -48,25 +59,61 @@ SEVERITY_ICON = {
 }
 
 MODULES = {
-    "1": ("System", SystemInfo),
-    "2": ("Resources", Resources),
-    "3": ("Security", Security),
-    "4": ("Packages", Packages),
-    "5": ("Services", Services),
-    "6": ("Users", Users),
-    "7": ("Filesystem", Filesystem),
+    "system": SystemInfo,
+    "resources": Resources,
+    "security": Security,
+    "packages": Packages,
+    "services": Services,
+    "users": Users,
+    "filesystem": Filesystem,
+    "hardening": Hardening,
+    "rootkit_ind": RootkitIndicators,
+    "logs": LogAudit,
 }
 
-MAIN_OPTIONS = [
-    ("Full Audit", "all modules including file scan", "full"),
-    ("Quick Scan", "system + resources + services", "quick"),
-    ("Security Focus", "security + users + packages + filesystem", "security"),
-    ("Deep File Scan", "walk /etc /tmp /home /opt …", "files"),
-    ("Pick Sections", "toggle individual modules", "pick"),
-    ("Export last results (JSON)", "if available", "export"),
-    ("Show Banner again", "", "banner"),
-    ("Quit", "", "quit"),
-]
+# Alias map for chat commands
+ALIASES = {
+    "full": "full",
+    "f": "full",
+    "1": "full",
+    "quick": "quick",
+    "q": "quick",
+    "2": "quick",
+    "security": "security",
+    "sec": "security",
+    "3": "security",
+    "files": "files",
+    "file": "files",
+    "scan": "files",
+    "4": "files",
+    "malware": "malware",
+    "rootkit": "rootkit",
+    "rk": "rootkit",
+    "lynis": "lynis",
+    "hardening": "hardening",
+    "hard": "hardening",
+    "logs": "logs",
+    "log": "logs",
+    "av": "malware",
+    "virus": "malware",
+    "5": "malware",
+    "fim": "fim",
+    "baseline": "fim",
+    "integrity": "fim",
+    "6": "fim",
+    "system": "system",
+    "packages": "packages",
+    "export": "export",
+    "help": "help",
+    "h": "help",
+    "?": "help",
+    "quit": "quit",
+    "exit": "quit",
+    "q!": "quit",
+}
+
+last_results: list[SectionResult] = []
+last_scan: ScanReport | None = None
 
 
 def render_section(result: SectionResult) -> None:
@@ -86,41 +133,29 @@ def render_section(result: SectionResult) -> None:
     for f in result.findings:
         icon = SEVERITY_ICON.get(f.status, "?")
         style = SEVERITY_STYLE.get(f.status, "")
-        status_cell = Text(f"{icon} {f.status.value.upper()}", style=style)
-        table.add_row(status_cell, f.title, f.detail or "—", f.recommendation or "")
+        table.add_row(
+            Text(f"{icon} {f.status.value.upper()}", style=style),
+            f.title,
+            f.detail or "—",
+            f.recommendation or "",
+        )
 
-    panel = Panel(
-        table,
-        title=f"[bold #C0C0C0]{result.name}[/]",
-        title_align="left",
-        border_style="#606060",
-        padding=(0, 1),
+    console.print(
+        Panel(
+            table,
+            title=f"[bold #C0C0C0]{result.name}[/]",
+            border_style="#606060",
+            padding=(0, 1),
+        )
     )
-    console.print(panel)
     console.print()
 
 
-def run_audits(module_keys: list[str]) -> list[SectionResult]:
-    selected = [MODULES[k] for k in module_keys if k in MODULES]
-    results: list[SectionResult] = []
-    total = len(selected)
-    for i, (name, cls) in enumerate(selected, 1):
-        with console.status(
-            f"[bold #A0A0A0][{i}/{total}] Scanning {name}…[/]",
-            spinner="dots",
-        ):
-            result = cls().run()
-        results.append(result)
-        render_section(result)
-    return results
-
-
-def summary(results: list[SectionResult]) -> None:
+def summary_sections(results: list[SectionResult]) -> None:
     counts = {s: 0 for s in Severity}
     for r in results:
         for f in r.findings:
             counts[f.status] += 1
-
     parts = []
     if counts[Severity.CRITICAL]:
         parts.append(f"[bold red]{counts[Severity.CRITICAL]} critical[/]")
@@ -130,11 +165,9 @@ def summary(results: list[SectionResult]) -> None:
         parts.append(f"[bold green]{counts[Severity.OK]} ok[/]")
     if counts[Severity.INFO]:
         parts.append(f"[cyan]{counts[Severity.INFO]} info[/]")
-
-    text = "  •  ".join(parts) if parts else "No findings"
     console.print(
         Panel(
-            Text.from_markup(text, justify="center"),
+            Text.from_markup("  •  ".join(parts) if parts else "No findings", justify="center"),
             title="[bold #C0C0C0]Summary[/]",
             border_style="#606060",
         )
@@ -142,7 +175,185 @@ def summary(results: list[SectionResult]) -> None:
     console.print()
 
 
-def to_json(results: list[SectionResult]) -> str:
+def run_modules(names: list[str]) -> list[SectionResult]:
+    results = []
+    for i, name in enumerate(names, 1):
+        cls = MODULES[name]
+        with console.status(f"[bold #A0A0A0][{i}/{len(names)}] {name}…[/]", spinner="dots"):
+            res = cls().run()
+        results.append(res)
+        render_section(res)
+    return results
+
+
+def show_scan_report(report: ScanReport) -> None:
+    global last_scan
+    last_scan = report
+    table = Table(
+        show_header=True,
+        header_style="bold #C0C0C0",
+        box=box.SIMPLE_HEAD,
+        border_style="#505050",
+        expand=True,
+    )
+    table.add_column("Sev", width=10)
+    table.add_column("Kind", width=12)
+    table.add_column("Path", style="#E0E0E0", ratio=3)
+    table.add_column("Detail", style="#A0A0A0", ratio=2)
+
+    style_map = {
+        "critical": "bold red",
+        "warn": "bold yellow",
+        "info": "cyan",
+    }
+    for f in report.findings[:100]:
+        table.add_row(
+            Text(f.severity.upper(), style=style_map.get(f.severity, "")),
+            f.kind,
+            f.path,
+            f.detail,
+        )
+
+    console.print(
+        Panel(
+            table if report.findings else Text("No threats or heuristics fired.", style="green"),
+            title="[bold #C0C0C0]File scan findings[/]",
+            border_style="#606060",
+        )
+    )
+    meta = (
+        f"files={report.files_seen}  hashed={report.files_hashed}  "
+        f"denied={len(report.permission_denied)}  "
+        f"clamav={'yes' if report.clamav_used else 'no'}  "
+        f"time={report.duration_sec:.1f}s"
+    )
+    console.print(Align.center(Text(meta, style="dim #808080")))
+    console.print()
+    if report.permission_denied:
+        console.print(
+            f"[yellow]{len(report.permission_denied)} paths not readable without elevated privileges.[/]"
+        )
+        console.print("[dim]Re-run files and answer y when prompted to use sudo for samples.[/]\n")
+
+
+def ask_sudo_for_path(path: str) -> bool:
+    try:
+        return Confirm.ask(
+            f"[bold #C0C0C0]Scan this protected file with sudo?[/]\n  {path}",
+            default=False,
+        )
+    except Exception:
+        return False
+
+
+def get_sudo_password() -> str | None:
+    try:
+        pw = getpass.getpass("sudo password (not stored): ")
+        return pw if pw else None
+    except Exception:
+        return None
+
+
+def cmd_help() -> None:
+    console.print(
+        Panel(
+            "\n".join(
+                f"  [bold]{c}[/]  — {n}: {d}" for c, n, d in FEATURES
+            ),
+            title="[bold #C0C0C0]Commands[/]",
+            border_style="#606060",
+        )
+    )
+    console.print(
+        "[dim]Also: type a path to scan one file, e.g. /etc/passwd[/]\n"
+    )
+
+
+def cmd_full() -> None:
+    global last_results
+    last_results = run_modules(list(MODULES.keys()))
+    summary_sections(last_results)
+    # also deep file pass
+    console.rule("[bold #A0A0A0]Deep file pass[/]", style="#505050")
+    report = deep_scan(
+        console,
+        use_clam=_clamscan_available(),
+        ask_sudo=ask_sudo_for_path,
+        get_password=get_sudo_password,
+    )
+    show_scan_report(report)
+
+
+def cmd_quick() -> None:
+    global last_results
+    last_results = run_modules(["system", "resources", "services"])
+    summary_sections(last_results)
+
+
+def cmd_security() -> None:
+    global last_results
+    last_results = run_modules(["security", "hardening", "rootkit_ind", "users", "packages", "filesystem"])
+    summary_sections(last_results)
+
+
+def cmd_files() -> None:
+    report = deep_scan(
+        console,
+        use_clam=False,
+        ask_sudo=ask_sudo_for_path,
+        get_password=get_sudo_password,
+    )
+    show_scan_report(report)
+
+
+def cmd_malware() -> None:
+    clam = _clamscan_available()
+    if clam:
+        console.print("[green]ClamAV detected — using clamscan/clamdscan where possible.[/]")
+    else:
+        console.print(
+            "[yellow]ClamAV not installed — using heuristic scan only.[/]\n"
+            "[dim]Install: sudo pacman -S clamav && sudo freshclam[/]"
+        )
+    report = deep_scan(
+        console,
+        use_clam=clam,
+        ask_sudo=ask_sudo_for_path,
+        get_password=get_sudo_password,
+    )
+    show_scan_report(report)
+
+
+def cmd_fim() -> None:
+    console.print("[bold #C0C0C0]FIM ( integrity)[/]")
+    choice = Prompt.ask(
+        "Action",
+        choices=["build", "check", "b", "c"],
+        default="check",
+    ).lower()
+    if choice in ("build", "b"):
+        n = build_baseline(console)
+        console.print(f"[green]Baseline saved ({n} files) → ~/.local/share/aries/fim_baseline.json[/]\n")
+    else:
+        findings = compare_baseline(console)
+        if not findings:
+            console.print("[green]No changes vs baseline (or no baseline).[/]\n")
+            return
+        table = Table(show_header=True, header_style="bold #C0C0C0", box=box.SIMPLE_HEAD)
+        table.add_column("Kind")
+        table.add_column("Path")
+        table.add_column("Detail")
+        for f in findings[:80]:
+            table.add_row(f.kind, f.path, f.detail)
+        console.print(Panel(table, title="[bold #C0C0C0]Integrity changes[/]", border_style="#606060"))
+        console.print()
+
+
+def cmd_export() -> None:
+    if not last_results and not last_scan:
+        console.print("[yellow]Nothing to export yet.[/]\n")
+        return
+    path = Prompt.ask("Save JSON to", default="aries-report.json")
     data = {
         "tool": "ARIES",
         "version": __version__,
@@ -161,164 +372,185 @@ def to_json(results: list[SectionResult]) -> str:
                 ],
                 "raw": r.raw,
             }
-            for r in results
+            for r in last_results
         ],
     }
-    return json.dumps(data, indent=2)
+    if last_scan:
+        data["file_scan"] = {
+            "files_seen": last_scan.files_seen,
+            "files_hashed": last_scan.files_hashed,
+            "denied": last_scan.permission_denied[:200],
+            "clamav": last_scan.clamav_used,
+            "findings": [
+                {"path": f.path, "kind": f.kind, "detail": f.detail, "severity": f.severity}
+                for f in last_scan.findings
+            ],
+        }
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2)
+        console.print(f"[green]Saved → {path}[/]\n")
+    except OSError as exc:
+        console.print(f"[red]Failed: {exc}[/]\n")
 
 
-def pick_sections_menu() -> list[str]:
-    keys = list(MODULES.keys())
-    labels = [MODULES[k][0] for k in keys]
-    active = [False] * len(labels)
+def scan_single_file(path: str) -> None:
+    from aries.scanner import scan_path, _clamscan_available
 
-    while True:
-        display = []
-        for i, name in enumerate(labels):
-            mark = "●" if active[i] else "○"
-            display.append(
-                (f"{mark}  {name}", "ON" if active[i] else "off")
+    console.print(f"[bold #A0A0A0]Scanning single path:[/] {path}")
+    if not os.path.exists(path):
+        console.print("[red]Path does not exist.[/]\n")
+        return
+    try:
+        findings = scan_path(path, use_clam=_clamscan_available(), console=console)
+    except PermissionError:
+        if ask_sudo_for_path(path):
+            # force content read via sudo for heuristics only
+            from aries.scanner import read_with_optional_sudo, SUSPICIOUS_CONTENT
+
+            data = read_with_optional_sudo(
+                path, console, lambda p: True, get_sudo_password
             )
-        display.append(("✓  Done — run selected", "finish"))
+            findings = []
+            if data:
+                import re as _re
 
-        idx = arrow_menu(console, "Pick Sections  (Enter toggles)", display)
-        if idx is None:
-            return []
-        if idx == len(labels):
-            return [keys[i] for i, on in enumerate(active) if on]
-        active[idx] = not active[idx]
-        # no full clear — just continue; menu redraws on next call
+                for rx in SUSPICIOUS_CONTENT:
+                    if rx.search(data):
+                        from aries.scanner import ScanFinding
 
-
-def interactive_loop() -> None:
-    last_results: list[SectionResult] = []
-
-    while True:
-        opts = [(label, desc) for label, desc, _ in MAIN_OPTIONS]
-        idx = arrow_menu(console, "Main Menu", opts)
-
-        if idx is None:
-            action = "quit"
+                        findings.append(
+                            ScanFinding(path, "heuristic", "match via sudo read", "warn")
+                        )
         else:
-            action = MAIN_OPTIONS[idx][2]
+            findings = []
+            console.print("[dim]Skipped.[/]\n")
+            return
 
-        if action == "quit":
-            console.print(
-                Align.center(Text("ARIES out. Stay secure.", style="dim #808080"))
-            )
+    if not findings:
+        console.print("[green]Clean (no heuristic/ClamAV hits).[/]\n")
+    else:
+        for f in findings:
+            console.print(f"[yellow]{f.kind}[/] {f.path}: {f.detail}")
+        console.print()
+
+
+# need os for single file
+import os
+
+
+def dispatch(raw: str) -> bool:
+    """Return False to quit."""
+    global last_results
+    line = raw.strip()
+    if not line:
+        return True
+
+    # path to scan
+    if line.startswith("/") or line.startswith("~"):
+        path = os.path.expanduser(line)
+        scan_single_file(path)
+        return True
+
+    key = ALIASES.get(line.lower())
+    if key is None:
+        console.print(f"[yellow]Unknown command:[/] {line}  — type [bold]help[/]\n")
+        return True
+
+    if key == "quit":
+        return False
+    if key == "help":
+        cmd_help()
+    elif key == "full":
+        cmd_full()
+    elif key == "quick":
+        cmd_quick()
+    elif key == "security":
+        cmd_security()
+    elif key == "files":
+        cmd_files()
+    elif key == "malware":
+        cmd_malware()
+    elif key == "fim":
+        cmd_fim()
+    elif key == "system":
+        last_results = run_modules(["system"])
+        summary_sections(last_results)
+    elif key == "packages":
+        last_results = run_modules(["packages"])
+        summary_sections(last_results)
+    elif key == "export":
+        cmd_export()
+    elif key == "rootkit":
+        show_tool_result(console, run_chkrootkit(console))
+        show_tool_result(console, run_rkhunter(console))
+    elif key == "hardening":
+        last_results = run_modules(["hardening"])
+        summary_sections(last_results)
+    elif key == "logs":
+        last_results = run_modules(["logs"])
+        summary_sections(last_results)
+    elif key == "lynis":
+        show_tool_result(console, run_lynis(console), max_lines=120)
+    return True
+
+
+def chat_loop() -> None:
+    prompt_install_missing(console)
+    render_dashboard(console)
+    while True:
+        try:
+            raw = Prompt.ask("[bold #C0C0C0]aries[/]")
+        except (EOFError, KeyboardInterrupt):
+            console.print()
+            break
+        if not dispatch(raw):
+            console.print(Align.center(Text("ARIES out. Stay secure.", style="dim #808080")))
             console.print()
             break
 
-        if action == "banner":
-            console.clear()
-            render_banner(console, version=__version__)
-            continue
-
-        if action == "export":
-            if not last_results:
-                console.print("[yellow]No results yet. Run an audit first.[/]\n")
-                continue
-            path = Prompt.ask("Save JSON to", default="aries-report.json")
-            try:
-                with open(path, "w", encoding="utf-8") as f:
-                    f.write(to_json(last_results))
-                console.print(f"[green]Saved → {path}[/]\n")
-            except Exception as exc:
-                console.print(f"[red]Failed to write: {exc}[/]\n")
-            continue
-
-        if action == "full":
-            keys = list(MODULES.keys())
-        elif action == "quick":
-            keys = ["1", "2", "5"]
-        elif action == "security":
-            keys = ["3", "6", "4", "7"]
-        elif action == "files":
-            keys = ["7"]
-        elif action == "pick":
-            keys = pick_sections_menu()
-            if not keys:
-                console.print("[yellow]Nothing selected.[/]\n")
-                continue
-        else:
-            continue
-
-        console.rule("[bold #A0A0A0]Running audit[/]", style="#505050")
-        console.print()
-        last_results = run_audits(keys)
-        summary(last_results)
-
-        console.print(
-            Text(
-                "Press Enter to return to menu…",
-                style="dim #606060",
-                justify="center",
-            )
-        )
-        _flush_stdin()
-        try:
-            input()
-        except (EOFError, KeyboardInterrupt):
-            break
-        _flush_stdin()
-        console.print()
-        render_compact_banner(console)
-
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
-@click.option("--quick", "-q", is_flag=True, help="Non-interactive quick overview")
-@click.option("--json", "as_json", is_flag=True, help="Non-interactive JSON output")
-@click.option(
-    "--section",
-    "-s",
-    multiple=True,
-    type=click.Choice(
-        ["system", "resources", "security", "packages", "services", "users", "filesystem"],
-        case_sensitive=False,
-    ),
-    help="Non-interactive: run only selected section(s)",
-)
-@click.option("--no-banner", is_flag=True, help="Skip banner (scripts)")
+@click.option("--quick", is_flag=True, help="Non-interactive quick scan")
+@click.option("--json", "as_json", is_flag=True, help="JSON full module dump")
+@click.option("--no-banner", is_flag=True, help="Skip dashboard")
 @click.version_option(__version__, prog_name="ARIES")
-def main(quick: bool, as_json: bool, section: tuple[str, ...], no_banner: bool) -> None:
-    """
-    ARIES — interactive system auditing terminal for Arch Linux.
-
-    Run without flags for the interactive menu (j/k to navigate).
-    """
-    if as_json or quick or section:
-        name_to_key = {v[0].lower(): k for k, v in MODULES.items()}
-        if section:
-            keys = [name_to_key[s.lower()] for s in section if s.lower() in name_to_key]
-        elif quick:
-            keys = ["1", "2", "5"]
-        else:
-            keys = list(MODULES.keys())
-
-        results = [MODULES[k][1]().run() for k in keys]
-
-        if as_json:
-            print(to_json(results))
-            return
-
-        if not no_banner:
-            render_banner(console, version=__version__)
-        for r in results:
-            render_section(r)
-        summary(results)
+def main(quick: bool, as_json: bool, no_banner: bool) -> None:
+    """ARIES interactive auditor — type commands in the chat prompt."""
+    if as_json:
+        results = [cls().run() for cls in MODULES.values()]
+        data = {
+            "tool": "ARIES",
+            "version": __version__,
+            "sections": [
+                {
+                    "name": r.name,
+                    "findings": [
+                        {
+                            "title": f.title,
+                            "status": f.status.value,
+                            "detail": f.detail,
+                        }
+                        for f in r.findings
+                    ],
+                }
+                for r in results
+            ],
+        }
+        print(json.dumps(data, indent=2))
         return
 
-    if not no_banner:
-        render_banner(console, version=__version__)
+    if quick:
+        if not no_banner:
+            render_dashboard(console)
+        cmd_quick()
+        return
 
     try:
-        interactive_loop()
+        chat_loop()
     except KeyboardInterrupt:
         console.print("\n")
-        console.print(
-            Align.center(Text("Interrupted. ARIES out.", style="dim #808080"))
-        )
-        console.print()
+        console.print(Align.center(Text("Interrupted.", style="dim #808080")))
 
 
 if __name__ == "__main__":

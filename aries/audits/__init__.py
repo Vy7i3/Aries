@@ -1,4 +1,4 @@
-"""Audit modules for ARIES."""
+"""Audit modules for ARIES (original implementations)."""
 
 from .system import SystemInfo
 from .resources import Resources
@@ -7,6 +7,9 @@ from .packages import Packages
 from .services import Services
 from .users import Users
 from .filesystem import Filesystem
+from .hardening import Hardening
+from .rootkit import RootkitIndicators
+from .logs import LogAudit
 
 __all__ = [
     "SystemInfo",
@@ -16,4 +19,7 @@ __all__ = [
     "Services",
     "Users",
     "Filesystem",
+    "Hardening",
+    "RootkitIndicators",
+    "LogAudit",
 ]
