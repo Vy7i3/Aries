@@ -307,16 +307,31 @@ def cmd_files() -> None:
 
 
 def cmd_malware() -> None:
+    from aries.antivirus import load_signatures, signature_stats, scan_tree
+
+    stats = signature_stats()
+    console.print(
+        f"[bold #C0C0C0]Local AV engine[/] — {stats['count']} SHA-256 signatures "
+        f"({stats['packs']} packs)"
+    )
+    if stats["count"] == 0:
+        console.print(
+            f"[yellow]No signatures found in {stats['dir']}.[/] "
+            "Place *.txt hash lists there (one SHA-256 per line)."
+        )
+    else:
+        load_signatures()  # warm cache
+
     clam = _clamscan_available()
     if clam:
-        console.print("[green]ClamAV detected — using clamscan/clamdscan where possible.[/]")
-    else:
-        console.print(
-            "[yellow]ClamAV not installed — using heuristic scan only.[/]\n"
-            "[dim]Install: sudo pacman -S clamav && sudo freshclam[/]"
-        )
+        console.print("[dim]ClamAV also available — will run alongside hash DB.[/]")
+
+    # Default roots for malware pass
+    roots = ["/tmp", "/var/tmp", "/home", "/opt", "/usr/local"]
+    console.print(f"[bold #A0A0A0]Scanning:[/] {', '.join(roots)}")
     report = deep_scan(
         console,
+        roots=roots,
         use_clam=clam,
         ask_sudo=ask_sudo_for_path,
         get_password=get_sudo_password,
