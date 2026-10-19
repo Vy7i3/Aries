@@ -1,15 +1,16 @@
-"""Dashboard: title left ABOVE box; goat in left box; features on the right."""
+"""Dashboard: centered title + goat; tools + about on the right."""
 
 from __future__ import annotations
 
-from rich.console import Console
+from rich.console import Console, Group
 from rich.panel import Panel
 from rich.columns import Columns
 from rich.table import Table
 from rich.text import Text
+from rich.align import Align
 from rich import box
 
-from aries.banner import make_title, make_goat
+from aries.banner import make_title, make_goat, GOAT_PIXEL
 from aries import __version__
 
 FEATURES = [
@@ -18,10 +19,9 @@ FEATURES = [
     ("security", "Security focus", "SSH, firewall, users, packages"),
     ("hardening", "Hardening checks", "kernel, sysctl, auth, mounts"),
     ("logs", "Log audit", "journal, failed logins, sudo, cron"),
-    ("rootkit", "Rootkit checks", "indicators + external tools"),
     ("files", "Deep file scan", "Per-file hash + heuristics"),
-    ("malware", "Malware scan", "ClamAV if installed"),
-    ("rootkit", "Rootkit checks", "chkrootkit / rkhunter if installed"),
+    ("malware", "Malware scan", "Local SHA-256 DB + ClamAV"),
+    ("rootkit", "Rootkit checks", "indicators + external tools"),
     ("lynis", "Lynis audit", "Run lynis if installed"),
     ("fim", "Integrity baseline", "Hash critical paths, detect changes"),
     ("system", "System info", "OS, kernel, uptime"),
@@ -31,23 +31,35 @@ FEATURES = [
     ("quit", "Quit", "Exit ARIES"),
 ]
 
+ABOUT_TEXT = """\
+ARIES is a local system auditing terminal for Arch Linux. \
+It inspects hardening, services, users, packages, logs, and the filesystem, \
+and can scan files against a built-in SHA-256 malware signature database. \
+Optional tools (Lynis, chkrootkit, rkhunter, ClamAV) plug in when installed. \
+Everything stays on your machine — no cloud account required.
+
+Type a command from the list above, or a path like /etc/passwd to scan one file. \
+Protected files will ask before using sudo."""
+
 
 def render_dashboard(console: Console) -> None:
-    # Title OUTSIDE the box, left side (above the goat box)
     console.print()
-    console.print(make_title())
-    console.print(Text(f"v{__version__}  •  Arch Linux", style="dim #808080"))
+    # Centered title + version
+    console.print(Align.center(make_title()))
+    console.print(Align.center(Text(f"v{__version__}  •  Arch Linux", style="dim #808080")))
     console.print()
 
+    goat_lines = len(GOAT_PIXEL.splitlines())
+
     goat_panel = Panel(
-        make_goat(),
+        Align.center(make_goat()),
         title="[bold #C0C0C0]ARIES[/]",
         subtitle="[dim]black goat of the system[/]",
         border_style="#606060",
         box=box.ROUNDED,
         padding=(0, 1),
-        title_align="left",
-        subtitle_align="left",
+        title_align="center",
+        subtitle_align="center",
     )
 
     table = Table(
@@ -74,12 +86,32 @@ def render_dashboard(console: Console) -> None:
         title_align="left",
     )
 
-    console.print(Columns([goat_panel, feat_panel], equal=False, expand=True))
+    about_lines = Text()
+    about_lines.append(ABOUT_TEXT, style="#A0A0A0")
+    target_right = goat_lines + 4
+    used = len(FEATURES) + 8
+    pad = max(0, target_right - used - 6)
+    if pad > 0:
+        about_lines.append("\n" * pad)
+
+    about_panel = Panel(
+        about_lines,
+        title="[bold #C0C0C0]About[/]",
+        border_style="#606060",
+        box=box.ROUNDED,
+        padding=(1, 2),
+        title_align="left",
+    )
+
+    right = Group(feat_panel, Text(""), about_panel)
+    console.print(Columns([goat_panel, right], equal=False, expand=True))
     console.print()
     console.print(
-        Text(
-            "  type a command (full, files, malware, rootkit, lynis, …) or a path",
-            style="dim #808080",
+        Align.center(
+            Text(
+                "type a command (full, files, malware, rootkit, lynis, …) or a path",
+                style="dim #808080",
+            )
         )
     )
     console.print()

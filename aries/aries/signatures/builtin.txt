@@ -1,0 +1,2 @@
+# Built-in test signature (EICAR)
+275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf146d5b0;EICAR-Test-File

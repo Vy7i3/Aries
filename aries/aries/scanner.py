@@ -24,6 +24,13 @@ from typing import Callable, Iterator
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
+try:
+    from aries.antivirus import scan_file as av_scan_file, load_signatures, signature_stats
+except Exception:
+    av_scan_file = None
+    load_signatures = None
+    signature_stats = None
+
 # Critical paths (FIM monitored set for Linux / Arch)
 DEFAULT_SCAN_ROOTS = [
     "/etc",
@@ -46,7 +53,8 @@ DEFAULT_SCAN_ROOTS = [
 SKIP_DIR_NAMES = {
     "proc", "sys", "dev", "run", "snap", "node_modules",
     ".cache", ".npm", ".cargo", "__pycache__", ".git",
-    "lost+found", "containers", "docker",
+    "lost+found", "containers", "docker", "signatures",
+    ".venv", "venv",
 }
 
 # Heuristic patterns (lightweight free-AV style, not a full engine)
@@ -64,6 +72,27 @@ SUSPICIOUS_CONTENT = [
 MAX_HASH_SIZE = 50 * 1024 * 1024  # 50 MiB
 MAX_HEURISTIC_READ = 512 * 1024
 MAX_FILES_DEFAULT = 50_000
+
+def _is_excluded_path(path: str) -> bool:
+    """Skip ARIES install tree and signature databases to avoid self-hits."""
+    try:
+        low = path.replace("\\", "/").lower()
+        if "/signatures/" in low or low.endswith("signatures"):
+            return True
+        if "sha256-hashes" in low:
+            return True
+        # common project layout markers
+        if "/aries/aries/" in low or "/aries/audits/" in low:
+            return True
+        if low.rstrip("/").endswith("/aries/aries") or low.rstrip("/").endswith("/aries/audits"):
+            return True
+        name = Path(path).name.lower()
+        if name.startswith("sha256-hashes"):
+            return True
+    except Exception:
+        return False
+    return False
+
 BASELINE_PATH = Path.home() / ".local" / "share" / "aries" / "fim_baseline.json"
 
 
@@ -251,6 +280,8 @@ def scan_path(
     console: Console | None = None,
 ) -> list[ScanFinding]:
     findings: list[ScanFinding] = []
+    if _is_excluded_path(path):
+        return findings
     try:
         st = os.lstat(path)
     except PermissionError:
@@ -269,6 +300,22 @@ def scan_path(
         threat = _clamscan_file(path)
         if threat:
             findings.append(ScanFinding(path, "threat", threat, "critical"))
+
+    # Local SHA-256 signature database (ARIES antivirus engine)
+    if av_scan_file is not None:
+        try:
+            av = av_scan_file(path)
+            if av.get("status") == "infected":
+                findings.append(
+                    ScanFinding(
+                        path,
+                        "threat",
+                        av.get("detail") or "SHA-256 malware signature match",
+                        "critical",
+                    )
+                )
+        except Exception:
+            pass
 
     return findings
 
