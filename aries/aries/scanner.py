@@ -25,6 +25,16 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
 
 try:
+    from aries.platform import default_scan_roots, skip_dir_names, detect_os
+except Exception:
+    def default_scan_roots():
+        return ["/etc", "/tmp", "/home"]
+    def skip_dir_names():
+        return {"proc", "sys", "dev", ".git"}
+    def detect_os():
+        return "linux"
+
+try:
     from aries.antivirus import scan_file as av_scan_file, load_signatures, signature_stats
 except Exception:
     av_scan_file = None
@@ -218,15 +228,19 @@ def walk_files(
                 if depth >= max_depth:
                     dirnames.clear()
                     continue
+                skip = skip_dir_names()
                 dirnames[:] = [
                     d
                     for d in dirnames
-                    if d not in SKIP_DIR_NAMES and not d.startswith(".")
+                    if d not in skip and not d.startswith(".")
                 ]
                 for name in filenames:
                     if seen >= max_files:
                         return
-                    yield os.path.join(dirpath, name)
+                    full = os.path.join(dirpath, name)
+                    if _is_excluded_path(full):
+                        continue
+                    yield full
                     seen += 1
         except (OSError, PermissionError):
             continue
@@ -333,7 +347,14 @@ def deep_scan(
     Walk roots, inspect every regular file possible.
     Permission-denied files are listed; optional interactive sudo for content checks.
     """
-    roots = roots or DEFAULT_SCAN_ROOTS
+    if roots is None:
+        try:
+            from aries.knowledge import scan_roots_from_repo
+            repo_roots = [r for r in scan_roots_from_repo() if __import__('os').path.isdir(r)]
+        except Exception:
+            repo_roots = []
+        roots = repo_roots or default_scan_roots()
+    roots = roots or default_scan_roots()
     if use_clam is None:
         use_clam = _clamscan_available()
 
@@ -438,7 +459,9 @@ def build_baseline(
     max_files: int = 15_000,
 ) -> int:
     """Create/overwrite FIM baseline (FIM checksum inventory)."""
-    roots = roots or ["/etc", "/usr/bin", "/usr/sbin", "/bin", "/sbin"]
+    if roots is None:
+        roots = default_scan_roots()[:8] or ["/etc", "/usr/bin"]
+    roots = roots or default_scan_roots()[:8]
     records: dict[str, dict] = {}
     paths = list(walk_files(roots, max_files=max_files, max_depth=5))
     with Progress(

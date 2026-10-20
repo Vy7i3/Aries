@@ -1,0 +1,88 @@
+{
+  "version": "1.0.0",
+  "description": "ARIES threat and anomaly indicator repository for Linux systems",
+  "suspicious_paths": [
+    "/dev/shm/.X11-unix",
+    "/dev/.lib",
+    "/dev/.static",
+    "/dev/.udev",
+    "/dev/.init",
+    "/usr/bin/...",
+    "/usr/sbin/...",
+    "/tmp/.../",
+    "/var/tmp/...",
+    "/etc/rc.d/init.d/.../",
+    "/lib/.x",
+    "/lib64/.x",
+    "/lib/libproc.so",
+    "/lib/libproc.a",
+    "/usr/include/rpc/.rpc",
+    "/usr/share/.fonts",
+    "/var/run/.tmp",
+    "/tmp/.ICE-unix",
+    "/tmp/.X11-lock",
+    "/root/.bash_history.bak",
+    "/tmp/kworker",
+    "/tmp/.hidden",
+    "/var/tmp/.hidden"
+  ],
+  "suspicious_basenames": [
+    "c99.php", "r57.php", "shell.php", "wso.php", "b374k.php",
+    "xmrig", "kinsing", "kdevtmpfs", "ksoftirqds", "crypto_miner",
+    "mine.sh", "xmr-stak", "payload", "backdoor", "rootkit",
+    "webshell", "nc.odd", "ncat.odd", "sshd.bak", "sudo.bak"
+  ],
+  "suspicious_process_names": [
+    "xmrig", "kinsing", "kdevtmpfs", "ksoftirqds", "mine",
+    "cryptominer", "[kworker/0:0]", "xmr-stak", "qemu-system-fake"
+  ],
+  "suspicious_kernel_modules": [
+    "diamorphine", "reptile", "suterusu", "hide", "rootkit",
+    "adore", "knark", "modhide"
+  ],
+  "world_writable_risk_dirs": [
+    "/etc", "/bin", "/sbin", "/usr/bin", "/usr/sbin",
+    "/lib", "/lib64", "/boot", "/root"
+  ],
+  "critical_permission_files": {
+    "/etc/passwd": {"max_mode": "0644", "world_write": false},
+    "/etc/shadow": {"max_mode": "0640", "world_read": false},
+    "/etc/gshadow": {"max_mode": "0640", "world_read": false},
+    "/etc/group": {"max_mode": "0644", "world_write": false},
+    "/etc/sudoers": {"max_mode": "0440", "world_write": false},
+    "/etc/ssh/sshd_config": {"max_mode": "0600", "world_write": false},
+    "/etc/crontab": {"max_mode": "0644", "world_write": false},
+    "/boot/grub/grub.cfg": {"max_mode": "0600", "world_write": false},
+    "/etc/fstab": {"max_mode": "0644", "world_write": false}
+  },
+  "dangerous_suid_unexpected": [
+    "nmap", "vim", "find", "bash", "sh", "python", "perl",
+    "ruby", "node", "php", "less", "more", "nano", "cp", "mv"
+  ],
+  "cron_risk_paths": [
+    "/etc/cron.d", "/etc/cron.daily", "/etc/cron.hourly",
+    "/etc/cron.weekly", "/etc/cron.monthly",
+    "/var/spool/cron", "/var/spool/cron/crontabs"
+  ],
+  "network_red_flags": [
+    "listening_on_0.0.0.0_unexpected",
+    "promiscuous_interface",
+    "ip_forward_enabled_non_router",
+    "accept_redirects_enabled",
+    "source_routing_enabled"
+  ],
+  "auth_red_flags": [
+    "permit_root_login_yes",
+    "password_authentication_yes_with_public_net",
+    "empty_password_accounts",
+    "uid0_non_root_user",
+    "nopasswd_sudo_broad"
+  ],
+  "log_red_flags": [
+    "mass_failed_logins",
+    "journal_flood_errors",
+    "auth_log_missing"
+  ],
+  "tmp_executable_risk": true,
+  "notes": "Indicators are public-knowledge IOCs and hardening heuristics for Linux. Not a complete malware catalog."
+}

@@ -327,8 +327,13 @@ def cmd_malware() -> None:
         console.print("[dim]ClamAV also available — will run alongside hash DB.[/]")
 
     # Default roots for malware pass
-    roots = ["/tmp", "/var/tmp", "/home", "/opt", "/usr/local"]
-    console.print(f"[bold #A0A0A0]Scanning:[/] {', '.join(roots)}")
+    try:
+        from aries.platform import default_scan_roots, os_label
+        roots = default_scan_roots() or ["/tmp"]
+        console.print(f"[bold #A0A0A0]OS:[/] {os_label()}  [bold #A0A0A0]Scanning:[/] {', '.join(roots[:8])}")
+    except Exception:
+        roots = ["/tmp", "/var/tmp", "/home"]
+        console.print(f"[bold #A0A0A0]Scanning:[/] {', '.join(roots)}")
     report = deep_scan(
         console,
         roots=roots,

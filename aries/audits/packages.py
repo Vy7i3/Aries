@@ -4,14 +4,54 @@ from __future__ import annotations
 
 from .base import SectionResult, Severity, run_cmd
 
+try:
+    from aries.platform import detect_os, is_linux, is_windows, is_macos
+except Exception:
+    def detect_os():
+        return "linux"
+    def is_linux():
+        return True
+    def is_windows():
+        return False
+    def is_macos():
+        return False
+
 
 class Packages:
     name = "Packages"
 
     def run(self) -> SectionResult:
         res = SectionResult(name=self.name)
+        res.raw["platform"] = detect_os()
 
-        # Total installed packages
+        if is_windows():
+            code, out, _ = run_cmd(["winget", "--version"])
+            if code == 0:
+                res.add("Package manager", Severity.INFO, f"winget available ({(out or '').strip()[:40]})")
+            else:
+                code2, out2, _ = run_cmd(["choco", "-v"])
+                if code2 == 0:
+                    res.add("Package manager", Severity.INFO, f"chocolatey {(out2 or '').strip()[:40]}")
+                else:
+                    res.add("Package manager", Severity.INFO, "use Windows Update / winget / choco")
+            res.add("Updates", Severity.INFO, "Check Settings → Windows Update", recommendation="Install OS and driver updates regularly")
+            return res
+
+        if is_macos():
+            code, out, _ = run_cmd(["brew", "--version"])
+            if code == 0:
+                res.add("Homebrew", Severity.INFO, (out or "").splitlines()[0][:60] if out else "present")
+            else:
+                res.add("Homebrew", Severity.INFO, "not found (optional)")
+            code, out, _ = run_cmd(["softwareupdate", "-l"])
+            if code == 0:
+                res.add("softwareupdate", Severity.INFO, "queried available updates")
+                res.raw["softwareupdate"] = (out or "")[:500]
+            else:
+                res.add("softwareupdate", Severity.SKIP, "cannot query")
+            return res
+
+        # Linux — prefer pacman, then dpkg/rpm
         code, out, _ = run_cmd(["pacman", "-Q"])
         if code == 0:
             pkgs = [ln for ln in out.splitlines() if ln.strip()]

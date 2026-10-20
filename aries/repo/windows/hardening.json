@@ -1,0 +1,47 @@
+{
+  "version": "1.0.0",
+  "platform": "windows",
+  "description": "Hardening recommendations for Windows",
+  "registry_and_policy": {
+    "EnableLUA": {
+      "optimal": "1",
+      "why": "Keep UAC enabled",
+      "set": "HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System EnableLUA = 1"
+    },
+    "ConsentPromptBehaviorAdmin": {
+      "optimal": "2",
+      "why": "Prompt for consent on secure desktop for admins",
+      "set": "ConsentPromptBehaviorAdmin = 2"
+    },
+    "DisableCAD": {
+      "optimal": "0",
+      "why": "Require Ctrl-Alt-Del at logon when applicable",
+      "set": "DisableCAD = 0"
+    },
+    "EnableSMB1Protocol": {
+      "optimal": "false",
+      "why": "SMBv1 is obsolete and dangerous",
+      "set": "Disable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol"
+    },
+    "fDenyTSConnections": {
+      "optimal": "1",
+      "why": "Disable RDP if not required",
+      "set": "Set fDenyTSConnections = 1 or enable NLA if RDP needed"
+    },
+    "UserAccountControl": {
+      "optimal": "enabled",
+      "why": "Never disable UAC on production endpoints"
+    }
+  },
+  "services": {
+    "RemoteRegistry": {"optimal": "disabled", "why": "Attack surface"},
+    "Telnet": {"optimal": "disabled", "why": "Cleartext remote shell"},
+    "SSDPSRV": {"optimal": "disabled_if_unused", "why": "Discovery noise"}
+  },
+  "firewall": {
+    "DomainProfile": {"optimal": "on", "why": "Windows Firewall on for all profiles"},
+    "PrivateProfile": {"optimal": "on"},
+    "PublicProfile": {"optimal": "on"}
+  },
+  "persistence_note": "Prefer Group Policy / Intune for durable settings. ARIES only recommends; it does not rewrite the registry automatically."
+}
