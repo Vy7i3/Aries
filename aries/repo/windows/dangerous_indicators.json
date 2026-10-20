@@ -1,0 +1,45 @@
+{
+  "version": "1.0.0",
+  "platform": "windows",
+  "description": "ARIES threat indicators for Windows",
+  "suspicious_paths": [
+    "C:\\Windows\\Temp\\svchost.exe",
+    "C:\\Windows\\System32\\wscript.exe.bak",
+    "C:\\Users\\Public\\Libraries\\ms-msdt",
+    "C:\\ProgramData\\Start Menu\\Programs\\Startup\\update.bat",
+    "C:\\Windows\\System32\\Tasks\\Microsoft\\Windows\\Update\\Updater",
+    "C:\\Temp\\miner.exe",
+    "C:\\Windows\\Fonts\\.font"
+  ],
+  "suspicious_basenames": [
+    "mimikatz.exe", "procdump.exe", "nc.exe", "ncat.exe",
+    "xmrig.exe", "coinminer.exe", "payload.exe", "backdoor.exe",
+    "keylogger.exe", "ransom.exe", "wscript_hidden.vbs",
+    "powershell_encoded.ps1", "lsass.dmp"
+  ],
+  "suspicious_process_names": [
+    "mimikatz", "xmrig", "coinminer", "procdump",
+    "powershell_ise_hidden", "wscript", "cscript"
+  ],
+  "suspicious_kernel_modules": [],
+  "critical_permission_files": {
+    "C:\\Windows\\System32\\config\\SAM": {"note": "sensitive account DB"},
+    "C:\\Windows\\System32\\config\\SYSTEM": {"note": "system hive"},
+    "C:\\Windows\\System32\\drivers\\etc\\hosts": {"note": "hosts file redirects"}
+  },
+  "scan_roots": [
+    "C:\\Users",
+    "C:\\ProgramData",
+    "C:\\Windows\\Temp",
+    "C:\\Temp",
+    "C:\\Windows\\System32\\Tasks",
+    "C:\\Windows\\System32\\drivers\\etc"
+  ],
+  "auth_red_flags": [
+    "guest_account_enabled",
+    "autoadminlogon",
+    "remote_desktop_open_without_nla",
+    "smbv1_enabled"
+  ],
+  "notes": "Windows indicator set for local heuristics; pair with Defender / ClamAV when available."
+}

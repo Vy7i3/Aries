@@ -13,6 +13,18 @@ from pathlib import Path
 from .base import SectionResult, Severity, run_cmd
 
 try:
+    from aries.platform import detect_os, is_linux, is_windows, is_macos
+except Exception:
+    def detect_os():
+        return "linux"
+    def is_linux():
+        return True
+    def is_windows():
+        return False
+    def is_macos():
+        return False
+
+try:
     from aries.knowledge import (
         load_systemd_hardening,
         sysctl_recommendation,
@@ -45,6 +57,15 @@ class Hardening:
 
     def run(self) -> SectionResult:
         res = SectionResult(name=self.name)
+        os_name = detect_os()
+        res.raw["platform"] = os_name
+        if is_windows():
+            self._windows_hardening(res)
+            return res
+        if is_macos():
+            self._macos_hardening(res)
+            return res
+        # Linux / systemd path
         self._sysctl_from_repo(res)
         self._auth(res)
         self._network_extra(res)
@@ -331,3 +352,89 @@ class Hardening:
             recommendation="; ".join(tips[:4]) + ("…" if len(tips) > 4 else ""),
         )
         res.raw["unit_hardening_tips"] = tips
+
+    def _windows_hardening(self, res: SectionResult) -> None:
+        try:
+            from aries.knowledge import windows_hardening_tips, load_hardening
+        except Exception:
+            windows_hardening_tips = lambda: []
+            load_hardening = lambda *a, **k: {}
+        res.add("Platform", Severity.INFO, "Windows detected — using Windows hardening profile")
+        tips = windows_hardening_tips()
+        data = load_hardening("windows") or {}
+        # Firewall via netsh if available
+        code, out, _ = run_cmd(["netsh", "advfirewall", "show", "allprofiles"])
+        if code == 0 and out:
+            if "State" in out and "OFF" in out.upper():
+                res.add(
+                    "Windows Firewall",
+                    Severity.WARN,
+                    "a profile may be OFF",
+                    recommendation="Enable firewall for Domain/Private/Public profiles",
+                )
+            else:
+                res.add("Windows Firewall", Severity.INFO, "netsh returned profile status")
+            res.raw["firewall"] = out[:500]
+        else:
+            res.add("Windows Firewall", Severity.SKIP, "netsh unavailable")
+        for tip in tips[:12]:
+            res.add("Recommendation", Severity.INFO, tip.split(" — ")[0][:60], recommendation=tip)
+        if not tips:
+            res.add(
+                "Hardening guide",
+                Severity.INFO,
+                "See repo/windows/hardening.json for UAC, SMBv1, RDP, firewall guidance",
+            )
+
+    def _macos_hardening(self, res: SectionResult) -> None:
+        try:
+            from aries.knowledge import macos_hardening_tips, load_hardening
+        except Exception:
+            macos_hardening_tips = lambda: []
+            load_hardening = lambda *a, **k: {}
+        res.add("Platform", Severity.INFO, "macOS detected — using macOS hardening profile")
+        # SIP
+        code, out, _ = run_cmd(["csrutil", "status"])
+        if code == 0 and out:
+            if "enabled" in out.lower():
+                res.add("SIP", Severity.OK, out.strip()[:80])
+            else:
+                res.add(
+                    "SIP",
+                    Severity.WARN,
+                    out.strip()[:80],
+                    recommendation="Keep System Integrity Protection enabled",
+                )
+        else:
+            res.add("SIP", Severity.SKIP, "csrutil unavailable")
+        # Gatekeeper
+        code, out, _ = run_cmd(["spctl", "--status"])
+        if code == 0 and out:
+            if "enabled" in out.lower() or "assessments enabled" in out.lower():
+                res.add("Gatekeeper", Severity.OK, out.strip()[:80])
+            else:
+                res.add(
+                    "Gatekeeper",
+                    Severity.WARN,
+                    out.strip()[:80],
+                    recommendation="spctl --master-enable",
+                )
+        else:
+            res.add("Gatekeeper", Severity.SKIP, "spctl unavailable")
+        # FileVault
+        code, out, _ = run_cmd(["fdesetup", "status"])
+        if code == 0 and out:
+            if "On" in out or "on" in out:
+                res.add("FileVault", Severity.OK, out.strip()[:80])
+            else:
+                res.add(
+                    "FileVault",
+                    Severity.WARN,
+                    out.strip()[:80],
+                    recommendation="Enable FileVault full-disk encryption",
+                )
+        else:
+            res.add("FileVault", Severity.SKIP, "fdesetup unavailable")
+        for tip in macos_hardening_tips()[:10]:
+            res.add("Recommendation", Severity.INFO, tip.split(" — ")[0][:60], recommendation=tip)
+

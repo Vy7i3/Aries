@@ -1,0 +1,43 @@
+{
+  "version": "1.0.0",
+  "platform": "macos",
+  "description": "Hardening recommendations for macOS",
+  "system": {
+    "sip": {
+      "optimal": "enabled",
+      "why": "System Integrity Protection should stay on",
+      "set": "csrutil status (recovery only to change)"
+    },
+    "gatekeeper": {
+      "optimal": "enabled",
+      "why": "Block untrusted apps",
+      "set": "spctl --status; spctl --master-enable"
+    },
+    "filevault": {
+      "optimal": "on",
+      "why": "Full-disk encryption at rest",
+      "set": "fdesetup status"
+    },
+    "firewall": {
+      "optimal": "on",
+      "why": "Application firewall enabled",
+      "set": "/usr/libexec/ApplicationFirewall/socketfilterfw --getglobalstate"
+    },
+    "remote_login": {
+      "optimal": "off_unless_needed",
+      "why": "SSH/remote login only when required",
+      "set": "System Settings → Sharing → Remote Login"
+    },
+    "auto_login": {
+      "optimal": "off",
+      "why": "No automatic login to a user session"
+    }
+  },
+  "sysctl_like": {
+    "net.inet.ip.forwarding": {
+      "optimal": "0",
+      "why": "No IP forwarding on clients"
+    }
+  },
+  "persistence_note": "Prefer MDM profiles for fleet settings. ARIES recommends only."
+}

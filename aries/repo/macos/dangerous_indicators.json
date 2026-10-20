@@ -1,0 +1,48 @@
+{
+  "version": "1.0.0",
+  "platform": "macos",
+  "description": "ARIES threat indicators for macOS",
+  "suspicious_paths": [
+    "/Library/LaunchDaemons/com.malware.plist",
+    "/Library/LaunchAgents/com.malware.plist",
+    "/Users/Shared/.hidden",
+    "/tmp/.fontnet",
+    "/var/root/.ssh/authorized_keys.bak",
+    "/usr/local/bin/xmrig",
+    "/Library/Preferences/com.apple.security.plist.bak"
+  ],
+  "suspicious_basenames": [
+    "xmrig", "kinsing", "mine.sh", "payload", "backdoor",
+    "keylogger", "osx.trojan", "macminer", "kernel_task_fake"
+  ],
+  "suspicious_process_names": [
+    "xmrig", "kinsing", "macminer", "osascript_hidden", "python_miner"
+  ],
+  "suspicious_kernel_modules": [
+    "kext_hide", "suspect.kext"
+  ],
+  "critical_permission_files": {
+    "/etc/passwd": {"max_mode": "0644"},
+    "/etc/master.passwd": {"world_read": false},
+    "/etc/sudoers": {"max_mode": "0440"},
+    "/var/root/.ssh/authorized_keys": {"world_read": false}
+  },
+  "scan_roots": [
+    "/Users",
+    "/Library/LaunchAgents",
+    "/Library/LaunchDaemons",
+    "/Library/StartupItems",
+    "/tmp",
+    "/var/tmp",
+    "/usr/local/bin",
+    "/Applications",
+    "/private/etc"
+  ],
+  "auth_red_flags": [
+    "sip_disabled",
+    "gatekeeper_disabled",
+    "filevault_off",
+    "remote_login_enabled_unexpected"
+  ],
+  "notes": "macOS indicator set; respect SIP and TCC — ARIES is read-only."
+}

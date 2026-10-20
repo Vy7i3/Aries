@@ -1,8 +1,16 @@
-# ARIES knowledge repository
+# ARIES knowledge repository (per OS)
 
-| File | Purpose |
-|------|---------|
-| `dangerous_indicators.json` | Paths, process names, modules, permission risks, auth/network red flags |
-| `systemd_hardening.json` | Optimal sysctl, systemd system.conf, unit sandboxing, sshd, mount options |
+```
+repo/
+  linux/
+    dangerous_indicators.json
+    hardening.json          # sysctl + systemd + sshd + mounts
+  windows/
+    dangerous_indicators.json
+    hardening.json
+  macos/
+    dangerous_indicators.json
+    hardening.json
+```
 
-Loaded at runtime by `aries.knowledge`. Edit these files to extend what ARIES looks for and recommends during `hardening`.
+ARIES detects the host OS and loads the matching folder automatically.

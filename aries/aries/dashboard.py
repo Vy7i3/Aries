@@ -13,6 +13,14 @@ from rich import box
 from aries.banner import make_title, make_goat, GOAT_PIXEL
 from aries import __version__
 
+try:
+    from aries.platform import os_label, detect_os
+except Exception:
+    def os_label():
+        return "Linux"
+    def detect_os():
+        return "linux"
+
 FEATURES = [
     ("full", "Full system audit", "All modules + deep file walk"),
     ("quick", "Quick scan", "System, resources, services"),
@@ -32,7 +40,7 @@ FEATURES = [
 ]
 
 ABOUT_TEXT = """\
-ARIES is a local system auditing terminal for Arch Linux. \
+ARIES is a local system auditing terminal (Linux, Windows, macOS). \
 It inspects hardening, services, users, packages, logs, and the filesystem, \
 and can scan files against a built-in SHA-256 malware signature database. \
 Optional tools (Lynis, chkrootkit, rkhunter, ClamAV) plug in when installed. \
@@ -46,7 +54,7 @@ def render_dashboard(console: Console) -> None:
     console.print()
     # Centered title + version
     console.print(Align.center(make_title()))
-    console.print(Align.center(Text(f"v{__version__}  •  Arch Linux", style="dim #808080")))
+    console.print(Align.center(Text(f"v{__version__}  •  {os_label()}  •  profile={detect_os()}", style="dim #808080")))
     console.print()
 
     goat_lines = len(GOAT_PIXEL.splitlines())

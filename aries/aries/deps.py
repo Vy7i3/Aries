@@ -9,6 +9,14 @@ import threading
 import time
 
 from rich.console import Console, Group
+
+try:
+    from aries.platform import detect_os, is_linux
+except Exception:
+    def detect_os():
+        return "linux"
+    def is_linux():
+        return True
 from rich.live import Live
 from rich.panel import Panel
 from rich.prompt import Confirm
@@ -171,6 +179,22 @@ def prompt_install_missing(console: Console) -> None:
     """
     On startup: list missing tools and ask whether to install via pacman.
     """
+    if not is_linux():
+        kind = detect_os()
+        console.print(
+            Panel(
+                Text(
+                    f"Host OS: {kind}. Automatic package install is supported on Arch Linux (pacman).\n"
+                    "Optional tools: install ClamAV / OS security updates with your platform package manager.",
+                    style="#A0A0A0",
+                ),
+                title="[bold #C0C0C0]Dependencies[/]",
+                border_style="#505050",
+            )
+        )
+        console.print()
+        return
+
     missing = missing_tools()
     if not missing:
         console.print(
