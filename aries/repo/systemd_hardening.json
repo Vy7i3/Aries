@@ -1,0 +1,235 @@
+{
+  "version": "1.0.0",
+  "description": "Optimal security settings for systemd-based Linux (recommendations shown during hardening)",
+  "sysctl": {
+    "kernel.randomize_va_space": {
+      "optimal": "2",
+      "why": "Full ASLR for user-space processes",
+      "set": "sysctl -w kernel.randomize_va_space=2"
+    },
+    "kernel.dmesg_restrict": {
+      "optimal": "1",
+      "why": "Prevent unprivileged users from reading kernel logs",
+      "set": "sysctl -w kernel.dmesg_restrict=1"
+    },
+    "kernel.kptr_restrict": {
+      "optimal": "2",
+      "why": "Hide kernel pointers from unprivileged users",
+      "set": "sysctl -w kernel.kptr_restrict=2"
+    },
+    "kernel.unprivileged_bpf_disabled": {
+      "optimal": "1",
+      "why": "Block unprivileged BPF (attack surface)",
+      "set": "sysctl -w kernel.unprivileged_bpf_disabled=1"
+    },
+    "kernel.yama.ptrace_scope": {
+      "optimal": "1",
+      "why": "Restrict ptrace to parent/child (or 2/3 for stricter)",
+      "set": "sysctl -w kernel.yama.ptrace_scope=1"
+    },
+    "kernel.sysrq": {
+      "optimal": "0",
+      "why": "Disable SysRq on production hosts unless needed",
+      "set": "sysctl -w kernel.sysrq=0"
+    },
+    "fs.suid_dumpable": {
+      "optimal": "0",
+      "why": "Disable core dumps of setuid programs",
+      "set": "sysctl -w fs.suid_dumpable=0"
+    },
+    "fs.protected_hardlinks": {
+      "optimal": "1",
+      "why": "Only link to files you own",
+      "set": "sysctl -w fs.protected_hardlinks=1"
+    },
+    "fs.protected_symlinks": {
+      "optimal": "1",
+      "why": "Safer symlink following in sticky dirs",
+      "set": "sysctl -w fs.protected_symlinks=1"
+    },
+    "net.ipv4.conf.all.rp_filter": {
+      "optimal": "1",
+      "why": "Source validation (anti-spoof)",
+      "set": "sysctl -w net.ipv4.conf.all.rp_filter=1"
+    },
+    "net.ipv4.conf.default.rp_filter": {
+      "optimal": "1",
+      "why": "Default rp_filter for new interfaces",
+      "set": "sysctl -w net.ipv4.conf.default.rp_filter=1"
+    },
+    "net.ipv4.conf.all.accept_redirects": {
+      "optimal": "0",
+      "why": "Ignore ICMP redirects",
+      "set": "sysctl -w net.ipv4.conf.all.accept_redirects=0"
+    },
+    "net.ipv4.conf.all.send_redirects": {
+      "optimal": "0",
+      "why": "Do not send ICMP redirects",
+      "set": "sysctl -w net.ipv4.conf.all.send_redirects=0"
+    },
+    "net.ipv4.conf.all.accept_source_route": {
+      "optimal": "0",
+      "why": "Disable source routing",
+      "set": "sysctl -w net.ipv4.conf.all.accept_source_route=0"
+    },
+    "net.ipv4.icmp_echo_ignore_broadcasts": {
+      "optimal": "1",
+      "why": "Ignore broadcast pings (Smurf mitigation)",
+      "set": "sysctl -w net.ipv4.icmp_echo_ignore_broadcasts=1"
+    },
+    "net.ipv4.tcp_syncookies": {
+      "optimal": "1",
+      "why": "SYN flood protection",
+      "set": "sysctl -w net.ipv4.tcp_syncookies=1"
+    },
+    "net.ipv4.ip_forward": {
+      "optimal": "0",
+      "why": "Disable routing unless this host is a router",
+      "set": "sysctl -w net.ipv4.ip_forward=0"
+    },
+    "net.ipv6.conf.all.accept_redirects": {
+      "optimal": "0",
+      "why": "Ignore IPv6 redirects",
+      "set": "sysctl -w net.ipv6.conf.all.accept_redirects=0"
+    },
+    "net.ipv6.conf.all.accept_ra": {
+      "optimal": "0",
+      "why": "Ignore router advertisements on servers",
+      "set": "sysctl -w net.ipv6.conf.all.accept_ra=0"
+    }
+  },
+  "systemd_system": {
+    "DefaultLimitNOFILE": {
+      "optimal": "65535",
+      "file": "/etc/systemd/system.conf",
+      "why": "Sensible open-file ceiling; raise only if needed"
+    },
+    "DumpCore": {
+      "optimal": "no",
+      "file": "/etc/systemd/system.conf",
+      "why": "Avoid core dumps on production"
+    },
+    "CrashShell": {
+      "optimal": "no",
+      "file": "/etc/systemd/system.conf",
+      "why": "No emergency shell on crash for locked-down hosts"
+    },
+    "CtrlAltDelBurstAction": {
+      "optimal": "none",
+      "file": "/etc/systemd/system.conf",
+      "why": "Disable accidental reboot via Ctrl-Alt-Del burst"
+    }
+  },
+  "systemd_unit_hardening": {
+    "NoNewPrivileges": {
+      "optimal": "true",
+      "why": "Service cannot gain new privileges"
+    },
+    "ProtectSystem": {
+      "optimal": "strict",
+      "why": "Read-only system hierarchy for the service"
+    },
+    "ProtectHome": {
+      "optimal": "true",
+      "why": "Hide /home /root /run/user from the service"
+    },
+    "PrivateTmp": {
+      "optimal": "true",
+      "why": "Private /tmp and /var/tmp for the service"
+    },
+    "PrivateDevices": {
+      "optimal": "true",
+      "why": "Minimal /dev namespace"
+    },
+    "ProtectKernelTunables": {
+      "optimal": "true",
+      "why": "Block writes to /proc/sys and similar"
+    },
+    "ProtectKernelModules": {
+      "optimal": "true",
+      "why": "Block module load/unload from the service"
+    },
+    "ProtectControlGroups": {
+      "optimal": "true",
+      "why": "Read-only cgroup tree"
+    },
+    "RestrictSUIDSGID": {
+      "optimal": "true",
+      "why": "Block exec of SUID/SGID binaries"
+    },
+    "RestrictRealtime": {
+      "optimal": "true",
+      "why": "No realtime scheduling"
+    },
+    "LockPersonality": {
+      "optimal": "true",
+      "why": "Lock execution domain"
+    },
+    "MemoryDenyWriteExecute": {
+      "optimal": "true",
+      "why": "W^X memory (when service allows)"
+    },
+    "SystemCallArchitectures": {
+      "optimal": "native",
+      "why": "Only native arch syscalls"
+    },
+    "CapabilityBoundingSet": {
+      "optimal": "drop unused capabilities",
+      "why": "Least privilege — keep only required caps"
+    }
+  },
+  "sshd": {
+    "PermitRootLogin": {
+      "optimal": "no",
+      "why": "No direct root SSH"
+    },
+    "PasswordAuthentication": {
+      "optimal": "no",
+      "why": "Prefer key-based auth"
+    },
+    "PubkeyAuthentication": {
+      "optimal": "yes",
+      "why": "Enable public key auth"
+    },
+    "X11Forwarding": {
+      "optimal": "no",
+      "why": "Disable unless required"
+    },
+    "MaxAuthTries": {
+      "optimal": "3",
+      "why": "Limit brute-force attempts"
+    },
+    "AllowTcpForwarding": {
+      "optimal": "no",
+      "why": "Disable forwarding unless needed"
+    },
+    "ClientAliveInterval": {
+      "optimal": "300",
+      "why": "Drop dead sessions"
+    },
+    "ClientAliveCountMax": {
+      "optimal": "2",
+      "why": "Alive probe limit"
+    }
+  },
+  "mount_options": {
+    "/tmp": {
+      "optimal": "noexec,nosuid,nodev",
+      "why": "Stop executing malware from /tmp"
+    },
+    "/dev/shm": {
+      "optimal": "noexec,nosuid,nodev",
+      "why": "Same for shared memory"
+    },
+    "/home": {
+      "optimal": "nodev,nosuid",
+      "why": "Reduce device/SUID abuse under home"
+    },
+    "/var/tmp": {
+      "optimal": "noexec,nosuid,nodev",
+      "why": "Like /tmp"
+    }
+  },
+  "persistence_note": "To make sysctl permanent on Arch: put lines in /etc/sysctl.d/99-aries-hardening.conf then sysctl --system",
+  "systemd_reload_note": "After editing system.conf: systemctl daemon-reexec (carefully) or reboot"
+}
